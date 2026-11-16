@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sim Bot">
+<meta name="theme-color" content="#f3f4ef">
+<title>Sim Bot · paper trading sur prix réels</title>
+<style>
+:root{--bg:#f3f4ef;--card:#fff;--ink:#15171b;--mute:#80858d;--line:#e3e5df;--green:#15a34a;--red:#dc2626;--accent:#d8f04a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.up{color:var(--green)}.down{color:var(--red)}.mute{color:var(--mute)}
+.ticker{display:flex;gap:22px;overflow-x:auto;padding:9px 16px;background:#fff;border-bottom:1px solid var(--line);white-space:nowrap;font-size:12.5px;scrollbar-width:none}
+.ticker b{font-weight:700;margin-right:6px}
+.wrap{max-width:1120px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:18px;align-items:flex-end;margin:6px 0 16px}
+.brand{display:flex;gap:14px;align-items:center}
+.logo{width:56px;height:56px;border-radius:16px;background:var(--ink);display:grid;place-items:center;color:var(--accent);font-weight:900;font-size:22px;box-shadow:0 0 0 4px #fff,0 6px 20px rgba(0,0,0,.12)}
+h1{margin:0;font-size:30px;letter-spacing:-.5px;line-height:1}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;vertical-align:middle;margin-left:8px;letter-spacing:.3px}
+.pill.sim{background:var(--accent);color:#2a2f00}
+.status{font-size:12.5px;margin-top:6px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#aaa;vertical-align:1px}
+.dot.on{background:var(--green);box-shadow:0 0 0 3px rgba(21,163,74,.18)}
+.dot.warn{background:#f59e0b}
+.dot.off{background:var(--red)}
+.eq{text-align:right}
+.eq .lbl{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.6px}
+.eq .big{font-size:46px;font-weight:800;letter-spacing:-1.5px;line-height:1.05}
+.eq .sub{font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat .k{font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.5px}
+.stat .v{font-size:18px;font-weight:700;margin-top:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h2{font-size:12px;margin:0 0 10px;color:var(--mute);text-transform:uppercase;letter-spacing:.7px;display:flex;justify-content:space-between;gap:8px}
+.chart{height:220px;position:relative}
+.chart canvas{width:100%;height:100%;display:block}
+.legend{display:flex;gap:14px;font-size:12px;margin-top:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:3px;margin-right:6px}
+.agents{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px;margin:12px 0}
+.agent{border-top:4px solid var(--c)}
+.agent .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.agent .name{font-weight:800;font-size:16px}
+.agent .desc{font-size:12px;color:var(--mute)}
+.agent .pnl{font-weight:700;font-size:16px;text-align:right}
+.agent .rows{margin-top:10px;font-size:12.5px;display:grid;grid-template-columns:1fr auto;gap:3px 10px}
+.agent .pos{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;font-size:12.5px;min-height:38px}
+.agent .pos div{display:flex;justify-content:space-between;gap:8px}
+.cols{display:grid;grid-template-columns:1.3fr 1fr;gap:12px}
+@media(max-width:820px){.cols{grid-template-columns:1fr}.eq{text-align:left}.eq .big{font-size:40px}}
+.log{max-height:420px;overflow:auto;font-size:12.5px}
+.log .row{display:grid;grid-template-columns:62px 58px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid #f0f1ec;align-items:start}
+.tag{font-size:10.5px;font-weight:800;text-align:center;border-radius:6px;padding:2px 0;letter-spacing:.4px}
+.tag.BUY{background:#fff6cc;color:#7a5b00}.tag.SELL{background:#dff3ff;color:#075985}.tag.INFO{background:#eef0ea;color:#555}
+.log .who{font-weight:700}
+.mk{font-size:12.5px;width:100%;border-collapse:collapse}
+.mk td{padding:6px 0;border-bottom:1px solid #f0f1ec}
+.mk td:not(:first-child){text-align:right}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px}
+.controls input{width:110px;padding:7px 9px;border:1px solid var(--line);border-radius:9px;font:inherit}
+button{font:inherit;font-weight:700;padding:7px 12px;border-radius:9px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer}
+button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+button.danger{background:var(--red);border-color:var(--red)}
+.note{font-size:12px;color:var(--mute);margin-top:14px;line-height:1.55}
+.err{display:none;background:#fff1f1;border:1px solid #fecaca;color:#991b1b;padding:10px 12px;border-radius:12px;margin-bottom:12px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="ticker mono" id="ticker">Connexion au marché…</div>
+<div class="wrap">
+  <div class="err" id="err"></div>
+  <header>
+    <div class="brand">
+      <div class="logo mono">SB</div>
+      <div>
+        <h1>SIM BOT <span class="pill sim mono">SIM · argent fictif</span></h1>
+        <div class="status mono"><span class="dot" id="dot"></span><span id="status">connexion…</span> · <span id="runtime">00:00:00</span></div>
+        <div class="status mute">4 agents · prix réels Binance · frais 0,1 % + slippage 0,05 % par ordre</div>
+      </div>
+    </div>
+    <div class="eq">
+      <div class="lbl">Valeur du portefeuille</div>
+      <div class="big mono" id="equity">—</div>
+      <div class="sub mono" id="pnl">—</div>
+      <div class="sub mono mute" id="vsbench">—</div>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Trades clôturés</div><div class="v mono" id="sTrades">0</div></div>
+    <div class="stat"><div class="k">Gagnants / perdants</div><div class="v mono" id="sWL">0 / 0</div></div>
+    <div class="stat"><div class="k">Taux de réussite</div><div class="v mono" id="sWin">—</div></div>
+    <div class="stat"><div class="k">Frais payés</div><div class="v mono" id="sFees">0 $</div></div>
+    <div class="stat"><div class="k">Positions ouvertes</div><div class="v mono" id="sOpen">0</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span>Courbe du portefeuille</span><span class="mono" id="chartInfo"></span></h2>
+    <div class="chart"><canvas id="chart"></canvas></div>
+    <div class="legend"><span><i style="background:#15171b"></i>Sim Bot</span><span><i style="background:#f59e0b"></i>Si tout avait été mis en BTC au départ</span><span><i style="background:#c9ccc5"></i>Capital de départ</span></div>
+  </div>
+
+  <div class="agents" id="agents"></div>
+
+  <div class="cols">
+    <div class="card">
+      <h2><span>$ tail -f decisions.log</span><span class="mono" id="logCount"></span></h2>
+      <div class="log mono" id="log"></div>
+    </div>
+    <div>
+      <div class="card">
+        <h2><span>Marché (bougies 1 min)</span><span>RSI 14</span></h2>
+        <table class="mk mono" id="market"></table>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <h2><span>Réglages</span></h2>
+        <div class="controls">
+          <label>Capital fictif <input id="capIn" type="number" min="50" step="50" value="1000"> $</label>
+          <button id="resetBtn" class="ghost">Réinitialiser</button>
+        </div>
+        <div class="note" id="resetNote"></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    Simulation uniquement : aucun ordre réel n'est envoyé, aucun portefeuille n'est connecté. Les prix viennent en direct de l'API publique de Binance.
+    Le bot ne tourne que quand cette page est ouverte ; l'état est sauvegardé dans ce navigateur et reprend au retour.
+    Les résultats passés, même simulés, ne prédisent rien. Ce n'est pas un conseil financier.
+  </p>
+</div>
+
+<script>
+"use strict";
+/* ---------- Config ---------- */
+const SYMS=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT'];
+const FEE=0.001, SLIP=0.0005;
+const STORE='simbot_v1';
+const REST=['https://data-api.binance.vision','https://api.binance.com'];
+const WSS=['wss://data-stream.binance.vision/stream','wss://stream.binance.com:9443/stream'];
+const DCA_EVERY=15*60*1000, DCA_SLICES=24;
+const G_STEP=0.006, G_LEVELS=6;
+const MOM={tp:0.008, sl:0.005, trailArm:0.005, trail:0.003};
+const DIP={rsi:28, exitRsi:55, tp:0.01, sl:0.012, maxHold:60*60*1000};
+const AG={
+  dca:{name:'DCA',desc:'achète BTC/ETH toutes les 15 min, ne vend jamais',c:'#15a34a'},
+  grid:{name:'Grid',desc:'grille sur BTC · achète en baisse, revend +0,6 %',c:'#2563eb'},
+  mom:{name:'Momentum',desc:'croisement EMA 9/21 + pic de volume',c:'#f59e0b'},
+  dip:{name:'Dip Hunter',desc:'achète quand RSI < 28 (survendu)',c:'#7c3aed'}
+};
+
+const SYS={name:'Système',c:'#80858d'};
+/* ---------- State ---------- */
+const market={}; SYMS.forEach(s=>market[s]={price:0,open24:0,candles:[],rsi:null,lastClosed:0});
+let S=load()||fresh(1000);
+let ready=false, ws=null, wsIdx=0, lastMsg=0;
+
+function fresh(capital){
+  const share=capital/4, mk=()=>({cash:share,pos:[],w:0,l:0,pnl:0,fees:0});
+  return {v:1,start:Date.now(),capital,
+    agents:{dca:Object.assign(mk(),{lastBuy:0,turn:0}),grid:Object.assign(mk(),{center:0,last:0}),mom:mk(),dip:mk()},
+    bench:null,eq:[],logs:[]};
+}
+function load(){try{const s=JSON.parse(localStorage.getItem(STORE));return s&&s.v===1?s:null}catch(e){return null}}
+function save(){try{localStorage.setItem(STORE,JSON.stringify(S))}catch(e){}}
+
+/* ---------- Format ---------- */
+const nf2=new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const usd=x=>nf2.format(x)+' $';
+const sgn=x=>(x>=0?'+':'−')+nf2.format(Math.abs(x))+' $';
+const pc=x=>(x>=0?'+':'−')+Math.abs(x*100).toFixed(2).replace('.',',')+' %';
+const px=x=>x>=100?nf2.format(x):x>=1?x.toFixed(4):x.toFixed(5);
+const tk=s=>s.replace('USDT','');
+const cls=x=>x>=0?'up':'down';
+const hhmmss=d=>new Date(d).toLocaleTimeString('fr-FR',{hour12:false});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- Indicators ---------- */
+function ema(a,n){const k=2/(n+1),o=[];let e=a[0];for(let i=0;i<a.length;i++){e=i?a[i]*k+e*(1-k):a[0];o.push(e)}return o}
+function rsi(a,n=14){const o=new Array(a.length).fill(null);if(a.length<=n)return o;let g=0,l=0;
+  for(let i=1;i<=n;i++){const d=a[i]-a[i-1];d>0?g+=d:l-=d}g/=n;l/=n;o[n]=l===0?100:100-100/(1+g/l);
+  for(let i=n+1;i<a.length;i++){const d=a[i]-a[i-1];g=(g*(n-1)+Math.max(d,0))/n;l=(l*(n-1)+Math.max(-d,0))/n;o[i]=l===0?100:100-100/(1+g/l)}return o}
+const avg=a=>a.reduce((x,y)=>x+y,0)/(a.length||1);
+
+/* ---------- Execution (simulée) ---------- */
+function log(k,type,sym,msg,pnl){S.logs.unshift({t:Date.now(),k,type,sym,msg,pnl});if(S.logs.length>300)S.logs.length=300}
+function buy(k,sym,amount,reason,extra){
+  const a=S.agents[k],p=market[sym].price;amount=Math.min(amount,a.cash);
+  if(!p||amount<1)return null;
+  const fill=p*(1+SLIP),fee=amount*FEE,qty=(amount-fee)/fill;
+  a.cash-=amount;a.fees+=fee;
+  const pos=Object.assign({sym,qty,entry:fill,cost:amount,t:Date.now(),peak:fill},extra||{});
+  a.pos.push(pos);
+  log(k,'BUY',sym,`${usd(amount)} @ ${px(fill)} · ${reason}`);
+  return pos;
+}
+function sell(k,pos,reason){
+  const a=S.agents[k],p=market[pos.sym].price;if(!p)return;
+  const fill=p*(1-SLIP),gross=pos.qty*fill,fee=gross*FEE,net=gross-fee,pnl=net-pos.cost;
+  a.cash+=net;a.fees+=fee;a.pnl+=pnl;pnl>=0?a.w++:a.l++;
+  a.pos.splice(a.pos.indexOf(pos),1);
+  log(k,'SELL',pos.sym,`${sgn(pnl)} (${pc(pnl/pos.cost)}) · ${reason}`,pnl);
+}
+
+/* ---------- Agents ---------- */
+function runDCA(){
+  const a=S.agents.dca,now=Date.now();if(now-a.lastBuy<DCA_EVERY||a.cash<1)return;
+  const sym=a.turn%2?'ETHUSDT':'BTCUSDT';if(!market[sym].price)return;
+  a.lastBuy=now;a.turn++;
+  buy('dca',sym,S.capital/4/DCA_SLICES,`achat programmé n°${a.turn}`);
+}
+function runGrid(){
+  const a=S.agents.grid,p=market.BTCUSDT.price;if(!p)return;
+  if(!a.center||(a.pos.length===0&&Math.abs(Math.log(p/a.center)/Math.log(1+G_STEP))>G_LEVELS+1)){
+    a.center=p;a.last=p;log('grid','INFO','BTCUSDT',`grille centrée à ${px(p)} · ${G_LEVELS} paliers de ${(G_STEP*100).toFixed(1).replace('.',',')} %`);return;}
+  const lv=x=>Math.log(x/a.center)/Math.log(1+G_STEP),lastL=lv(a.last),nowL=lv(p),chunk=S.capital/4/G_LEVELS;
+  if(nowL<lastL){for(let L=Math.ceil(nowL);L<lastL;L++){
+      if(L<=0&&L>-G_LEVELS&&!a.pos.some(x=>x.level===L)&&a.cash>=1)buy('grid','BTCUSDT',chunk,`palier ${L} touché en baisse`,{level:L});}}
+  else if(nowL>lastL){for(let L=Math.floor(nowL);L>lastL;L--){
+      a.pos.filter(x=>x.level===L-1).forEach(x=>sell('grid',x,`palier ${L} atteint en hausse`));}}
+  a.last=p;
+}
+function checkExits(){
+  const now=Date.now();
+  S.agents.mom.pos.slice().forEach(pos=>{const p=market[pos.sym].price;if(!p)return;pos.peak=Math.max(pos.peak,p);const ch=p/pos.entry-1;
+    if(ch>=MOM.tp)sell('mom',pos,'take-profit +0,8 %');
+    else if(ch<=-MOM.sl)sell('mom',pos,'stop-loss −0,5 %');
+    else if(pos.peak/pos.entry-1>=MOM.trailArm&&p<=pos.peak*(1-MOM.trail))sell('mom',pos,'trailing stop');});
+  S.agents.dip.pos.slice().forEach(pos=>{const p=market[pos.sym].price;if(!p)return;const ch=p/pos.entry-1;
+    if(ch>=DIP.tp)sell('dip',pos,'take-profit +1 %');
+    else if(ch<=-DIP.sl)sell('dip',pos,'stop-loss −1,2 %');
+    else if(now-pos.t>DIP.maxHold)sell('dip',pos,'durée max 60 min');});
+}
+function onCandleClose(sym){
+  const c=market[sym].candles;if(c.length<60)return;
+  const cl=c.map(x=>x.c),vo=c.map(x=>x.v),n=cl.length-1;
+  const e9=ema(cl,9),e21=ema(cl,21),e50=ema(cl,50),r=rsi(cl,14);market[sym].rsi=r[n];
+  if(!ready)return;
+  const m=S.agents.mom,held=m.pos.find(x=>x.sym===sym);
+  const up=e9[n-1]<=e21[n-1]&&e9[n]>e21[n],dn=e9[n-1]>=e21[n-1]&&e9[n]<e21[n],av=avg(vo.slice(-21,-1));
+  if(!held&&up&&cl[n]>e50[n]&&vo[n]>1.3*av&&m.pos.length<2)buy('mom',sym,S.capital/8,`EMA9 croise EMA21 ↑ · volume ×${(vo[n]/av).toFixed(1)}`);
+  else if(held&&dn)sell('mom',held,'EMA9 repasse sous EMA21');
+  const d=S.agents.dip,dh=d.pos.find(x=>x.sym===sym);
+  if(!dh&&r[n]!=null&&r[n]<DIP.rsi&&d.pos.length<2)buy('dip',sym,S.capital/8,`RSI ${r[n].toFixed(0)} (survendu)`);
+  else if(dh&&r[n]>DIP.exitRsi)sell('dip',dh,`RSI remonté à ${r[n].toFixed(0)}`);
+}
+
+/* ---------- Valuation ---------- */
+const posVal=p=>p.qty*(market[p.sym].price||p.entry);
+const agentVal=a=>a.cash+a.pos.reduce((s,p)=>s+posVal(p),0);
+const equity=()=>Object.values(S.agents).reduce((s,a)=>s+agentVal(a),0);
+const benchVal=()=>S.bench&&market.BTCUSDT.price?S.bench.qty*market.BTCUSDT.price*(1-SLIP)*(1-FEE):null;
+
+/* ---------- Market data ---------- */
+async function getJSON(path){let last;for(const base of REST){try{const r=await fetch(base+path);if(r.ok)return await r.json();last=new Error('HTTP '+r.status)}catch(e){last=e}}throw last}
+async function bootstrap(){
+  setStatus('warn','chargement de l\'historique…');
+  try{
+    await Promise.all(SYMS.map(async s=>{
+      const k=await getJSON(`/api/v3/klines?symbol=${s}&interval=1m&limit=200`);
+      market[s].candles=k.slice(0,-1).map(x=>({t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+x[5]}));
+      market[s].price=+k[k.length-1][4];market[s].lastClosed=market[s].candles.at(-1).t;
+      onCandleClose(s);
+      try{const t=await getJSON(`/api/v3/ticker/24hr?symbol=${s}`);market[s].open24=+t.openPrice}catch(e){}
+    }));
+  }catch(e){showErr('Impossible de joindre Binance ('+(e.message||e)+'). Vérifie ta connexion ; si ton réseau bloque Binance, le bot ne peut pas lire les prix.');setStatus('off','hors ligne');setTimeout(bootstrap,10000);return}
+  hideErr();ready=true;
+  if(!S.bench){S.bench={qty:S.capital*(1-FEE)/(market.BTCUSDT.price*(1+SLIP)),price:market.BTCUSDT.price};
+    log('sys','INFO','BTCUSDT','4 agents en ligne · capital '+usd(S.capital)+' · 25 % par agent');}
+  connectWS();
+}
+function connectWS(){
+  const streams=SYMS.flatMap(s=>[s.toLowerCase()+'@kline_1m',s.toLowerCase()+'@miniTicker']).join('/');
+  try{ws=new WebSocket(WSS[wsIdx%WSS.length]+'?streams='+streams)}catch(e){wsIdx++;setTimeout(connectWS,3000);return}
+  ws.onopen=()=>{setStatus('on','LIVE');lastMsg=Date.now()};
+  ws.onmessage=ev=>{lastMsg=Date.now();let m;try{m=JSON.parse(ev.data).data}catch(e){return}if(!m)return;
+    const mk=market[m.s];if(!mk)return;
+    if(m.e==='kline'){const k=m.k;mk.price=+k.c;
+      if(k.x&&k.t>mk.lastClosed){mk.lastClosed=k.t;mk.candles.push({t:k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v});if(mk.candles.length>300)mk.candles.shift();onCandleClose(m.s)}}
+    else if(m.e==='24hrMiniTicker'){mk.open24=+m.o;mk.price=+m.c}};
+  ws.onclose=()=>{setStatus('warn','reconnexion…');wsIdx++;setTimeout(connectWS,3000)};
+  ws.onerror=()=>{try{ws.close()}catch(e){}};
+}
+setInterval(()=>{if(ws&&ws.readyState===1&&Date.now()-lastMsg>30000){try{ws.close()}catch(e){}}},10000);
+
+/* ---------- UI ---------- */
+const $=id=>document.getElementById(id);
+function setStatus(k,t){$('dot').className='dot '+k;$('status').textContent=t}
+function showErr(t){$('err').style.display='block';$('err').textContent=t}
+function hideErr(){$('err').style.display='none'}
+
+function render(){
+  // ticker
+  $('ticker').innerHTML=SYMS.map(s=>{const m=market[s];if(!m.price)return'';const ch=m.open24?m.price/m.open24-1:0;
+    return `<span><b>${tk(s)}</b>${px(m.price)} <span class="${cls(ch)}">${pc(ch)}</span></span>`}).join('')||'Connexion au marché…';
+  const t=Math.floor((Date.now()-S.start)/1000);
+  $('runtime').textContent=`${String(Math.floor(t/3600)).padStart(2,'0')}:${String(Math.floor(t/60)%60).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+  if(!ready)return;
+  const eq=equity(),d=eq-S.capital,bv=benchVal();
+  $('equity').textContent=usd(eq);
+  $('pnl').innerHTML=`<span class="${cls(d)}">${sgn(d)} (${pc(d/S.capital)})</span> <span class="mute">depuis ${usd(S.capital)}</span>`;
+  $('vsbench').textContent=bv?`BTC acheté et gardé : ${usd(bv)} (${pc(bv/S.capital-1)})`:'';
+  let w=0,l=0,fees=0,open=0;Object.values(S.agents).forEach(a=>{w+=a.w;l+=a.l;fees+=a.fees;open+=a.pos.length});
+  $('sTrades').textContent=w+l;$('sWL').innerHTML=`<span class="up">${w}</span> / <span class="down">${l}</span>`;
+  $('sWin').textContent=w+l?(w/(w+l)*100).toFixed(0)+' %':'—';$('sFees').textContent=usd(fees);$('sOpen').textContent=open;
+  // agents
+  $('agents').innerHTML=Object.keys(AG).map(k=>{const a=S.agents[k],g=AG[k],val=agentVal(a),share=S.capital/4,tot=val-share;
+    const unreal=a.pos.reduce((s,p)=>s+posVal(p)-p.cost,0);
+    const bySym={};a.pos.forEach(p=>{const b=bySym[p.sym]||(bySym[p.sym]={qty:0,cost:0,val:0,n:0});b.qty+=p.qty;b.cost+=p.cost;b.val+=posVal(p);b.n++});
+    const pos=Object.entries(bySym).map(([s,b])=>`<div><span>${tk(s)}${b.n>1?' ×'+b.n:''} · ${usd(b.cost)}</span><span class="${cls(b.val-b.cost)}">${pc(b.val/b.cost-1)}</span></div>`).join('')||'<span class="mute">aucune position · en veille</span>';
+    return `<div class="card agent" style="--c:${g.c}"><div class="top"><div><div class="name">${g.name}</div><div class="desc">${g.desc}</div></div>
+      <div class="pnl mono ${cls(tot)}">${sgn(tot)}<div class="desc">${pc(tot/share)}</div></div></div>
+      <div class="rows mono"><span class="mute">Cash</span><span>${usd(a.cash)}</span><span class="mute">Réalisé</span><span class="${cls(a.pnl)}">${sgn(a.pnl)}</span>
+      <span class="mute">Latent</span><span class="${cls(unreal)}">${sgn(unreal)}</span><span class="mute">W · L</span><span>${a.w} · ${a.l}</span></div>
+      <div class="pos mono">${pos}</div></div>`}).join('');
+  // log
+  $('logCount').textContent=S.logs.length+' lignes';
+  $('log').innerHTML=S.logs.slice(0,120).map(x=>`<div class="row"><span class="mute">${hhmmss(x.t)}</span><span class="tag ${x.type}">${x.type==='BUY'?'ACHAT':x.type==='SELL'?'VENTE':'INFO'}</span>
+    <span><span class="who" style="color:${(AG[x.k]||SYS).c}">${(AG[x.k]||SYS).name}</span> · <b>${tk(x.sym)}</b><br><span class="${x.pnl==null?'mute':cls(x.pnl)}">${esc(x.msg)}</span></span></div>`).join('')||'<div class="mute">Les agents observent le marché. Les premières décisions arrivent dès qu\'un signal apparaît (ça peut prendre du temps, c\'est normal).</div>';
+  // market
+  $('market').innerHTML=SYMS.map(s=>{const m=market[s],r=m.rsi;return `<tr><td><b>${tk(s)}</b></td><td>${px(m.price)}</td><td class="${r==null?'':r<30?'up':r>70?'down':''}">${r==null?'—':r.toFixed(0)}</td></tr>`}).join('');
+  drawChart();
+}
+
+function drawChart(){
+  const cv=$('chart'),dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W)return;
+  if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr}
+  const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,W,H);
+  const pts=S.eq.concat([{t:Date.now(),e:equity(),b:benchVal()}]);
+  if(pts.length<2){c.fillStyle='#80858d';c.font='12px sans-serif';c.fillText('La courbe se dessine au fil des minutes…',10,20);return}
+  let lo=S.capital,hi=S.capital;pts.forEach(p=>{lo=Math.min(lo,p.e,p.b??p.e);hi=Math.max(hi,p.e,p.b??p.e)});
+  const pad=(hi-lo)*0.15||S.capital*0.002;lo-=pad;hi+=pad;
+  const L=58,R=8,T=8,B=20,t0=pts[0].t,t1=pts.at(-1).t||t0+1;
+  const X=t=>L+(t-t0)/Math.max(1,t1-t0)*(W-L-R),Y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+  c.font='11px ui-monospace,Menlo,monospace';c.fillStyle='#80858d';c.strokeStyle='#eef0ea';c.lineWidth=1;
+  for(let i=0;i<=3;i++){const v=lo+(hi-lo)*i/3,y=Y(v);c.beginPath();c.moveTo(L,y);c.lineTo(W-R,y);c.stroke();c.fillText(Math.round(v)+' $',4,y+4)}
+  c.fillText(hhmmss(t0).slice(0,5),L,H-4);const te=hhmmss(t1).slice(0,5);c.fillText(te,W-R-c.measureText(te).width,H-4);
+  c.setLineDash([4,4]);c.strokeStyle='#c9ccc5';c.beginPath();c.moveTo(L,Y(S.capital));c.lineTo(W-R,Y(S.capital));c.stroke();c.setLineDash([]);
+  const line=(key,col,w)=>{c.strokeStyle=col;c.lineWidth=w;c.beginPath();let s=false;pts.forEach(p=>{if(p[key]==null)return;const x=X(p.t),y=Y(p[key]);s?c.lineTo(x,y):c.moveTo(x,y);s=true});c.stroke()};
+  line('b','#f59e0b',1.5);line('e','#15171b',2.2);
+  const last=pts.at(-1);c.fillStyle='#15171b';c.beginPath();c.arc(X(last.t),Y(last.e),3.5,0,7);c.fill();
+  $('chartInfo').textContent=pts.length+' points';
+}
+
+/* ---------- Reset ---------- */
+let armed=0;
+$('capIn').value=S.capital;
+$('resetBtn').onclick=()=>{
+  if(Date.now()-armed>4000){armed=Date.now();$('resetBtn').textContent='Confirmer ?';$('resetBtn').className='danger';$('resetNote').textContent='Clique encore pour tout effacer et repartir de zéro.';
+    setTimeout(()=>{if(Date.now()-armed>=4000){$('resetBtn').textContent='Réinitialiser';$('resetBtn').className='ghost';$('resetNote').textContent=''}},4100);return}
+  const cap=Math.max(50,+$('capIn').value||1000);S=fresh(cap);armed=0;
+  if(ready&&market.BTCUSDT.price){S.bench={qty:cap*(1-FEE)/(market.BTCUSDT.price*(1+SLIP)),price:market.BTCUSDT.price};log('sys','INFO','BTCUSDT','4 agents en ligne · capital '+usd(cap)+' · 25 % par agent')}
+  $('resetBtn').textContent='Réinitialiser';$('resetBtn').className='ghost';$('resetNote').textContent='Nouvelle simulation lancée.';save();render();
+};
+
+/* ---------- Loop ---------- */
+setInterval(()=>{if(ready){runDCA();runGrid();checkExits()}render()},1000);
+setInterval(()=>{if(!ready)return;S.eq.push({t:Date.now(),e:equity(),b:benchVal()});
+  if(S.eq.length>1500)S.eq=S.eq.filter((_,i)=>i%2===0);},15000);
+setInterval(()=>{if(ready)save()},5000);
+window.addEventListener('beforeunload',()=>{if(ready)save()});
+window.addEventListener('resize',drawChart);
+render();bootstrap();
+</script>
+</body>
+</html>
